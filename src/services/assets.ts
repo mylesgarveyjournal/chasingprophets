@@ -104,6 +104,30 @@ export async function getAllAssets(): Promise<Asset[]> {
   }
 }
 
+// Simple in-memory search over asset list. Designed to be async so it can be swapped
+// with a backend search endpoint later. Returns up to `limit` results.
+export async function searchAssets(query: string, limit = 10): Promise<Asset[]> {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+
+  const assets = await getAllAssets();
+
+  // scoring: exact ticker prefix (score 100), name prefix (score 80), ticker substring (60), name substring (40)
+  const scored = assets.map(a => {
+    const ticker = (a.ticker || '').toLowerCase();
+    const name = (a.name || '').toLowerCase();
+    let score = 0;
+    if (ticker.startsWith(q)) score = 100;
+    else if (name.startsWith(q)) score = 80;
+    else if (ticker.includes(q)) score = 60;
+    else if (name.includes(q)) score = 40;
+    return { asset: a, score };
+  }).filter(x => x.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.asset);
+}
+
 export async function getAssetsByMarket(market: string): Promise<Asset[]> {
   if (useLocalFallback) {
     const data = await import('../data/generatedPrices.json');

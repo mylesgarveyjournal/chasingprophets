@@ -3,6 +3,7 @@ import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { BarChart2, Database, Settings, Search, LogOut, Bell } from 'react-feather';
 import NotificationPopup from '../notifications/NotificationPopup';
+import SearchBox from '../controls/SearchBox';
 import { getUnreadCountForUser } from '../../services/notifications';
 import './Layout.css';
 
@@ -107,7 +108,8 @@ const Layout: React.FC = () => {
         <header className="header">
           <div className="search-bar">
             <Search />
-            <input type="text" placeholder="Search markets, prophets, analysis..." />
+            {/* Modular instant search box */}
+            <SearchBox />
           </div>
 
           <div className="user-menu">
