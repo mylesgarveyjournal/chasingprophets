@@ -1,0 +1,6 @@
+node_modules
+dist
+code_generated
+.vite
+coverage
+/.vscode

@@ -1,26 +1,26 @@
 import React, { useState, useMemo } from 'react';
-import { Asset } from '../types/asset';
+import { AssetMeta } from '../types/assets';
+import { PriceData } from '../types/price';
 import StockChart from '../components/chart/StockChart';
-import { TimeWindowSelector, ScaleTypeSelector } from '../components/controls/Controls';
-import { ProphetSelector } from '../components/prophet/ProphetSelector';
+// removed unused imports: TimeWindowSelector, ScaleTypeSelector, ProphetSelector
 import { DJIA_DATA, SPX_DATA } from '../data/testData';
 import './Dashboard.css';
 
 const MAX_ACTIVE_PROPHETS = 4;
 
 export default function Dashboard() {
-  const [selectedAsset, setSelectedAsset] = useState<'DJIA' | 'SPX'>('DJIA');
+  const [selectedAsset, _setSelectedAsset] = useState<'DJIA' | 'SPX'>('DJIA');
   const [selectedProphets, setSelectedProphets] = useState<string[]>(['timeSage', 'trendOracle']);
-  const [timeWindow, setTimeWindow] = useState('1W');
-  const [scaleType, setScaleType] = useState<'linear' | 'log'>('linear');
+  const [timeWindow, _setTimeWindow] = useState('1W');
+  const [scaleType, _setScaleType] = useState<'linear' | 'log'>('linear');
 
-  const handleScaleTypeChange = (scale: string) => {
-    setScaleType(scale === 'Log' ? 'log' : 'linear');
+  const _handleScaleTypeChange = (scale: string) => {
+    _setScaleType(scale === 'Log' ? 'log' : 'linear');
   };
 
   const data = selectedAsset === 'DJIA' ? DJIA_DATA : SPX_DATA;
 
-  const handleProphetSelect = (prophetId: string) => {
+  const _handleProphetSelect = (prophetId: string) => {
     setSelectedProphets(current => {
       if (current.includes(prophetId)) {
         return current.filter(id => id !== prophetId);
@@ -33,7 +33,7 @@ export default function Dashboard() {
     });
   };
 
-  const chartData = useMemo(() => {
+  const _chartData = useMemo(() => {
     if (!data.length) return [];
 
     const timeWindowDays = {
@@ -58,7 +58,7 @@ export default function Dashboard() {
     ];
 
     selectedProphets.forEach(prophet => {
-      const prophetKey = prophet as keyof Asset;
+      const prophetKey = prophet as keyof PriceData;
       if (filteredData[0]?.[prophetKey] !== undefined) {
         traces.push({
           x: filteredData.map(d => d.date),

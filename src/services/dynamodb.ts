@@ -6,7 +6,9 @@ import {
   QueryCommand, 
   ScanCommand 
 } from "@aws-sdk/lib-dynamodb";
+import { TABLES, AssetMeta } from '../types/assets.ts';
 
+// Initialize DynamoDB client with proper error handling
 const client = new DynamoDBClient({
   region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
   credentials: {
@@ -17,33 +19,29 @@ const client = new DynamoDBClient({
 
 export const ddbDocClient = DynamoDBDocumentClient.from(client);
 
-export interface Asset {
-  symbol: string;
-  market: string;
-  name: string;
-  sector?: string;
-  lastPrice: number;
+// Use the AssetMeta interface from types/assets.ts for consistency
+export interface DynamoAsset extends AssetMeta {
   lastUpdated: string;
 }
 
-export async function getAssetBySymbol(symbol: string, market: string): Promise<Asset | null> {
+export async function getAssetBySymbol(symbol: string, market: string): Promise<DynamoAsset | null> {
   const command = new GetCommand({
-    TableName: "ChasingProphets-Assets",
+    TableName: TABLES.ASSETS,
     Key: { symbol, market }
   });
 
   try {
     const response = await ddbDocClient.send(command);
-    return response.Item as Asset || null;
+    return response.Item as DynamoAsset || null;
   } catch (error) {
     console.error('Error fetching asset:', error);
     throw error;
   }
 }
 
-export async function getAssetsByMarket(market: string): Promise<Asset[]> {
+export async function getAssetsByMarket(market: string): Promise<DynamoAsset[]> {
   const command = new QueryCommand({
-    TableName: "ChasingProphets-Assets",
+    TableName: TABLES.ASSETS,
     IndexName: "MarketLastUpdatedIndex",
     KeyConditionExpression: "market = :market",
     ExpressionAttributeValues: {
@@ -53,7 +51,7 @@ export async function getAssetsByMarket(market: string): Promise<Asset[]> {
 
   try {
     const response = await ddbDocClient.send(command);
-    return (response.Items || []) as Asset[];
+    return (response.Items || []) as DynamoAsset[];
   } catch (error) {
     console.error('Error fetching assets by market:', error);
     throw error;
@@ -66,9 +64,9 @@ export async function updateAssetPrice(
   lastPrice: number
 ): Promise<void> {
   const command = new PutCommand({
-    TableName: "ChasingProphets-Assets",
+    TableName: TABLES.ASSETS,
     Item: {
-      symbol,
+      ticker: symbol,
       market,
       lastPrice,
       lastUpdated: new Date().toISOString()
@@ -83,15 +81,15 @@ export async function updateAssetPrice(
   }
 }
 
-export async function getAllAssets(limit = 50): Promise<Asset[]> {
+export async function getAllAssets(limit = 50): Promise<DynamoAsset[]> {
   const command = new ScanCommand({
-    TableName: "ChasingProphets-Assets",
+    TableName: TABLES.ASSETS,
     Limit: limit
   });
 
   try {
     const response = await ddbDocClient.send(command);
-    return (response.Items || []) as Asset[];
+    return (response.Items || []) as DynamoAsset[];
   } catch (error) {
     console.error('Error fetching all assets:', error);
     throw error;

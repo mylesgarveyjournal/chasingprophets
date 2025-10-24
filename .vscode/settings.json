@@ -1,0 +1,13 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/code_generated": true
+  },
+  "search.exclude": {
+    "**/code_generated": true
+  },
+  "eslint.workingDirectories": [
+    { "mode": "auto" }
+  ]
+}

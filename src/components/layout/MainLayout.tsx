@@ -2,8 +2,8 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  BarChart2, Search, Bell, User, Globe,
-  Activity, Settings, LogOut
+  BarChart2, Bell, User, Globe,
+  Settings, LogOut
 } from 'react-feather';
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -58,10 +58,9 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
       <div className="main-container">
         <header className="header">
-          <div className="search-bar">
-            <Search size={16} />
-            <input type="text" placeholder="Search markets, prophets, analysis..." />
-          </div>
+          {/* MainLayout had a simple search input; the main app Layout provides a unified SearchBox.
+              Removing the duplicate input to avoid two search bars showing when both layouts are used. */}
+          <div className="search-bar-placeholder" />
 
           <div className="user-menu">
             <button className="icon-button">

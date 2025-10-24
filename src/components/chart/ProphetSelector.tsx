@@ -30,7 +30,7 @@ const ProphetSelector: React.FC<ProphetSelectorProps> = ({
     <div className="prophet-selector">
       <h2 className="title">Prophet Selection</h2>
       <div className="prophet-list">
-        {prophets.map((prophet, idx) => (
+  {prophets.map((prophet) => (
           <div key={prophet} className="prophet-item">
             {/* Prophet Header Row */}
             <div className={`prophet-header ${activeProphets.includes(prophet) ? 'active' : ''}`}>

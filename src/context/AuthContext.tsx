@@ -10,7 +10,7 @@ interface User {
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
-  signIn: (username: string, password: string) => Promise<void>;
+  signIn: (username: string, password: string, newPassword?: string) => Promise<void>;
   signOut: () => void;
 }
 
@@ -40,40 +40,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function checkAuth() {
     try {
       const cognitoUser = userPool.getCurrentUser();
-      if (cognitoUser) {
-        const session = await new Promise<AmazonCognitoIdentity.CognitoUserSession>((resolve, reject) => {
+      if (!cognitoUser) {
+        setIsAuthenticated(false);
+        setUser(null);
+        return;
+      }
+
+      // Guard: ensure getSession exists on the returned object
+      if (typeof cognitoUser.getSession !== 'function') {
+        setIsAuthenticated(false);
+        setUser(null);
+        return;
+      }
+
+      const session = await new Promise<AmazonCognitoIdentity.CognitoUserSession>((resolve, reject) => {
+        try {
           cognitoUser.getSession((err: Error | null, session: AmazonCognitoIdentity.CognitoUserSession) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(session);
-            }
+            if (err) return reject(err);
+            resolve(session);
           });
-        });
-        
-        if (session.isValid()) {
+        } catch (e) {
+          reject(e);
+        }
+      });
+
+      if (!session || !session.isValid || !session.isValid()) {
+        setIsAuthenticated(false);
+        setUser(null);
+        return;
+      }
+
+      // Attempt to read attributes but don't fail auth if they can't be read
+      let email = '';
+      try {
+        if (typeof cognitoUser.getUserAttributes === 'function') {
           const userAttributes = await new Promise<AmazonCognitoIdentity.CognitoUserAttribute[]>((resolve, reject) => {
-            cognitoUser.getUserAttributes((err, result) => {
-              if (err) {
-                reject(err);
-              } else {
-                resolve(result || []);
-              }
+            cognitoUser.getUserAttributes((err: Error | undefined | null, result: AmazonCognitoIdentity.CognitoUserAttribute[] | undefined | null) => {
+              if (err) return reject(err);
+              resolve(result || []);
             });
           });
-
-          const email = userAttributes.find((attr) => attr.getName() === 'email')?.getValue() || '';
-          // Hardcode admin role for specific email
-          const role = email === 'admin@chasingprophets.local' ? 'admin' : 'user';
-
-          setUser({
-            username: cognitoUser.getUsername(),
-            email,
-            role
-          });
-          setIsAuthenticated(true);
+          email = userAttributes.find((attr) => attr.getName() === 'email')?.getValue() || '';
         }
+      } catch (err) {
+        console.warn('Failed to read user attributes, proceeding with username only', err);
+        email = '';
       }
+
+      const role = email === 'admin@chasingprophets.local' ? 'admin' : 'user';
+
+      setUser({
+        username: typeof cognitoUser.getUsername === 'function' ? cognitoUser.getUsername() : '',
+        email,
+        role
+      });
+      setIsAuthenticated(true);
     } catch (error) {
       console.error('Auth check failed:', error);
       setIsAuthenticated(false);
@@ -106,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error('Authentication failed:', err);
             reject(err);
           },
-          newPasswordRequired: (userAttributes, requiredAttributes) => {
+          newPasswordRequired: (userAttributes, _requiredAttributes) => {
             if (newPassword) {
               delete userAttributes.email_verified;
               delete userAttributes.email;

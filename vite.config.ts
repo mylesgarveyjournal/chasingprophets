@@ -9,7 +9,9 @@ export default defineConfig({
   resolve: {
     alias: {
       './runtimeConfig': './runtimeConfig.browser',
-    }
+      '@': '/src'
+    },
+    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
   },
   define: {
     global: 'window',

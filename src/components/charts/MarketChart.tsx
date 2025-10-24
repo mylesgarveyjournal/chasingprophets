@@ -9,10 +9,11 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import { Asset, PriceData, getAssetPrices } from '../../services/assets';
+import { getAssetPrices } from '../../services/assets';
+import { PriceData } from '../../types/price';
 
 interface MarketChartProps {
-  assets: Asset[];
+  assets: any[];
   selectedProphets: string[];
   timeWindow: string;
   scaleType: string;

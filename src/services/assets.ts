@@ -1,12 +1,14 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { 
   DynamoDBDocumentClient, 
   GetCommand,
   QueryCommand,
   ScanCommand
-} from "@aws-sdk/lib-dynamodb";
+} from '@aws-sdk/lib-dynamodb';
+import { TABLES, RawPricesData, RawAssetData, AssetMeta, AssetSearchResult } from '../types/assets';
+import { PriceData } from '../types/price';
 
-let ddb: any = null;
+let ddb: DynamoDBDocumentClient | null = null;
 let useLocalFallback = false;
 
 try {
@@ -31,73 +33,82 @@ try {
   useLocalFallback = true;
 }
 
-import { Asset } from '../types/asset';
-
-export interface PriceData {
-  ticker: string;
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
+function normalizeAssetResponse(
+  data: RawAssetData | null,
+  ticker: string
+): AssetMeta | null {
+  if (!data?.prices?.length) return null;
+  const last = data.prices[data.prices.length - 1];
+  const prev = data.prices[data.prices.length - 2];
+  const lastPrice = last?.close ?? null;
+  const priceChange = last && prev ? ((last.close - prev.close) / prev.close) * 100 : 0;
+  return {
+    ticker,
+    name: data.metadata.name,
+    market: data.metadata.market || 'Unknown',
+    lastPrice,
+    priceChange
+  };
 }
 
-export async function getAsset(ticker: string): Promise<any | null> {
+// Asset type used in responses
+type AssetResponse = AssetMeta;
+
+export async function getAsset(ticker: string): Promise<AssetResponse | null> {
   if (useLocalFallback) {
-    const data = await import('../data/generatedPrices.json');
-    const item = data.default?.[ticker];
-    if (!item) return null;
-    const prices = item.prices || [];
-    const last = prices[prices.length - 1];
-    const prev = prices[prices.length - 2];
-    const lastPrice = last?.close ?? null;
-    const priceChange = last && prev ? ((last.close - prev.close) / prev.close) * 100 : 0;
-    return {
-      ticker,
-      name: item.metadata.name,
-      market: item.metadata.market || 'Unknown',
-      lastPrice,
-      priceChange
-    };
+    type RawGeneratedData = Record<string, {
+      metadata: { ticker: string; name: string; market?: string };
+      prices: Array<{
+        date: string;
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+        volume: number;
+      }>;
+    }>;
+    const data = (await import('../data/generatedPrices.json')).default as RawGeneratedData;
+    return normalizeAssetResponse(data[ticker] || null, ticker);
   }
+
   const command = new GetCommand({
-    TableName: "ChasingProphets-Assets",
+    TableName: TABLES.ASSETS,
     Key: { ticker }
   });
 
   try {
+    if (!ddb) throw new Error('DynamoDB client not initialized');
     const response = await ddb.send(command);
-    return response.Item as Asset || null;
+    return response.Item as AssetResponse || null;
   } catch (error) {
     console.error('Error fetching asset:', error);
     throw error;
   }
 }
 
-export async function getAllAssets(): Promise<Asset[]> {
+export async function getAllAssets(): Promise<AssetResponse[]> {
   if (useLocalFallback) {
-    const data = await import('../data/generatedPrices.json');
-    return Object.values(data.default || {}).map((v: any) => {
-      const prices = v.prices || [];
-      const last = prices[prices.length - 1];
-      const prev = prices[prices.length - 2];
-      const lastPrice = last?.close ?? 0;
-      const priceChange = last && prev ? ((last.close - prev.close) / prev.close) * 100 : 0;
-      return {
-        ticker: v.metadata.ticker,
-        name: v.metadata.name,
-        market: v.metadata.market || 'Unknown',
-        lastPrice,
-        priceChange
-      } as any;
-    });
+    const data = (await import('../data/generatedPrices.json')).default as Record<string, {
+      metadata: { ticker: string; name: string; market?: string };
+      prices: Array<{
+        date: string;
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+        volume: number;
+      }>;
+    }>;
+    return Object.entries(data)
+      .map(([ticker, asset]) => normalizeAssetResponse(asset, ticker))
+      .filter((asset): asset is AssetMeta => asset !== null);
   }
 
-  const command = new ScanCommand({ TableName: 'ChasingProphets-Assets' });
+  const command = new ScanCommand({ TableName: TABLES.ASSETS });
   try {
+    if (!ddb) throw new Error('DynamoDB client not initialized');
     const response = await ddb.send(command);
-    return (response.Items || []) as Asset[];
+    return (response.Items || []) as AssetResponse[];
   } catch (error) {
     console.error('Error fetching all assets:', error);
     throw error;
@@ -106,44 +117,56 @@ export async function getAllAssets(): Promise<Asset[]> {
 
 // Simple in-memory search over asset list. Designed to be async so it can be swapped
 // with a backend search endpoint later. Returns up to `limit` results.
-export async function searchAssets(query: string, limit = 10): Promise<Asset[]> {
+export async function searchAssets(query: string, limit = 10): Promise<AssetSearchResult[]> {
   const q = (query || '').trim().toLowerCase();
   if (!q) return [];
 
   const assets = await getAllAssets();
 
-  // scoring: exact ticker prefix (score 100), name prefix (score 80), ticker substring (60), name substring (40)
-  const scored = assets.map(a => {
+  // Only show exact matches or prefix matches for ticker/name
+  const scored = assets.map((a: AssetMeta) => {
     const ticker = (a.ticker || '').toLowerCase();
     const name = (a.name || '').toLowerCase();
     let score = 0;
-    if (ticker.startsWith(q)) score = 100;
-    else if (name.startsWith(q)) score = 80;
-    else if (ticker.includes(q)) score = 60;
-    else if (name.includes(q)) score = 40;
+    if (ticker === q) score = 100;  // Exact ticker match
+    else if (ticker.startsWith(q)) score = 90;  // Ticker prefix match
+    else if (name.startsWith(q)) score = 80;  // Name prefix match
     return { asset: a, score };
   }).filter(x => x.score > 0);
 
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map(s => s.asset);
+  return scored.slice(0, limit).map(s => ({
+    ticker: s.asset.ticker,
+    name: s.asset.name,
+    market: s.asset.market,
+    lastPrice: s.asset.lastPrice === null ? undefined : s.asset.lastPrice,
+    type: 'Asset' as const
+  }));
 }
 
-export async function getAssetsByMarket(market: string): Promise<Asset[]> {
+export async function getAssetsByMarket(market: string): Promise<AssetResponse[]> {
   if (useLocalFallback) {
-    const data = await import('../data/generatedPrices.json');
-    return Object.values(data.default || {}).filter((v: any) => v.metadata.market === market).map((v: any) => ({ ticker: v.metadata.ticker, name: v.metadata.name } as Asset));
+    const data = (await import('../data/generatedPrices.json')).default as RawPricesData;
+    return Object.entries(data)
+      .filter(([_, asset]: [string, RawAssetData]) => asset.metadata.market === market)
+      .map(([ticker, asset]: [string, RawAssetData]) => ({
+        ticker,
+        name: asset.metadata.name,
+        market: asset.metadata.market
+      }));
   }
 
   const command = new QueryCommand({
-    TableName: 'ChasingProphets-Assets',
+    TableName: TABLES.ASSETS,
     IndexName: 'MarketIndex',
     KeyConditionExpression: 'market = :market',
     ExpressionAttributeValues: { ':market': market }
   });
 
   try {
+    if (!ddb) throw new Error('DynamoDB client not initialized');
     const response = await ddb.send(command);
-    return (response.Items || []) as Asset[];
+    return (response.Items || []) as AssetResponse[];
   } catch (error) {
     console.error('Error fetching assets by market:', error);
     throw error;
@@ -156,28 +179,41 @@ export async function getAssetPrices(
   endDate?: string
 ): Promise<PriceData[]> {
   if (useLocalFallback) {
-    const data = await import('../data/generatedPrices.json');
-    const asset = data.default?.[ticker];
+    type RawPrice = {
+      date: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    };
+
+    const data = (await import('../data/generatedPrices.json')).default as RawPricesData;
+    const asset = data[ticker];
     if (!asset) return [];
-    let prices = asset.prices as PriceData[];
-    if (startDate) prices = prices.filter(p => p.date >= startDate);
-    if (endDate) prices = prices.filter(p => p.date <= endDate);
-    return prices;
+    let prices = asset.prices.map((p: RawPrice) => ({
+      ...p,
+      ticker  // Add the ticker field to each price entry
+    }));
+    if (startDate) prices = prices.filter((p: PriceData) => p.date >= startDate);
+    if (endDate) prices = prices.filter((p: PriceData) => p.date <= endDate);
+    return prices as PriceData[];
   }
 
   const command = new QueryCommand({
-    TableName: 'ChasingProphets-AssetPrices',
+    TableName: TABLES.ASSET_PRICES,
     KeyConditionExpression: startDate && endDate ? 'ticker = :t AND #date BETWEEN :start AND :end' : 'ticker = :t',
     ExpressionAttributeValues: {
       ':t': ticker,
       ...(startDate && { ':start': startDate }),
       ...(endDate && { ':end': endDate })
     },
-    ExpressionAttributeNames: { '#date': 'date' },
+    ...(startDate && endDate && { ExpressionAttributeNames: { '#date': 'date' } }),
     ScanIndexForward: true
   });
 
   try {
+    if (!ddb) throw new Error('DynamoDB client not initialized');
     const response = await ddb.send(command);
     return (response.Items || []) as PriceData[];
   } catch (error) {

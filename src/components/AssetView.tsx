@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Asset, getAsset, getAssetPrices, PriceData } from '../services/assets';
+type DisplayAsset = { name: string; description?: string };
+import { getAsset, getAssetPrices } from '../services/assets';
+import { PriceData } from '../types/price';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 interface AssetViewProps {
@@ -7,7 +9,7 @@ interface AssetViewProps {
 }
 
 export default function AssetView({ ticker }: AssetViewProps) {
-  const [asset, setAsset] = useState<Asset | null>(null);
+  const [asset, setAsset] = useState<DisplayAsset | null>(null);
   const [priceData, setPriceData] = useState<PriceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

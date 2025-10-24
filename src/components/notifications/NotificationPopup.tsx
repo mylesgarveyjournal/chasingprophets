@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getUnreadNotificationsForUser, markNotificationChecked, markAllReadForUser, Notification } from '../../services/notifications';
+import { getUnreadNotificationsForUser, markNotificationChecked, Notification } from '../../services/notifications';
 import './NotificationPopup.css';
 
 interface Props {
@@ -37,7 +37,6 @@ export default function NotificationPopup({ onClose, onChange }: Props) {
     if (!user) return;
     console.debug('NotificationPopup: current user', user);
     fetchNotifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   async function fetchNotifications() {
@@ -105,7 +104,6 @@ export default function NotificationPopup({ onClose, onChange }: Props) {
     adjustPopupPosition();
     window.addEventListener('resize', adjustPopupPosition);
     return () => window.removeEventListener('resize', adjustPopupPosition);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifications.length]);
 
   return (

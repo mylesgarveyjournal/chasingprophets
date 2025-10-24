@@ -3,12 +3,21 @@ import { useParams } from 'react-router-dom';
 // @ts-ignore
 import Plotly from 'plotly.js-dist-min';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { getAsset, getAssetPrices, PriceData } from '../services/assets';
-import { Asset } from '../types/asset';
+import { getAsset, getAssetPrices } from '../services/assets';
+import { PriceData } from '../types/price';
+
+// Minimal asset metadata used on the page (separate from per-price Asset points)
+interface AssetMeta {
+  ticker: string;
+  name?: string;
+  market?: string;
+  lastPrice?: number | null;
+  priceChange?: number | null;
+}
 
 export default function AssetPage() {
   const { ticker } = useParams<{ ticker: string }>();
-  const [asset, setAsset] = useState<Asset | null>(null);
+  const [asset, setAsset] = useState<AssetMeta | null>(null);
   const [prices, setPrices] = useState<PriceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,15 +32,26 @@ export default function AssetPage() {
           getAssetPrices(ticker)
         ]);
 
-        if (!assetData) {
-          throw new Error('Asset not found');
+        // If the metadata API doesn't return an asset but prices exist, fall back to
+        // constructing minimal metadata so the user still sees the price chart.
+        if (!assetData && priceData && priceData.length) {
+          setAsset({ ticker: ticker || '', name: ticker });
+        } else if (assetData) {
+          // normalize metadata shape
+          setAsset({
+            ticker: assetData.ticker || ticker,
+            name: assetData.name || ticker,
+            market: assetData.market
+          });
+        } else {
+          // Neither metadata nor price data found
+          setError('Asset not found');
         }
 
-        setAsset(assetData);
-        setPrices(priceData);
+        setPrices(priceData || []);
         setLoading(false);
-      } catch (err) {
-        setError('Failed to load asset data');
+      } catch (err: any) {
+        setError(err?.message || 'Failed to load asset data');
         setLoading(false);
       }
     }
@@ -110,26 +130,46 @@ export default function AssetPage() {
     // Plot candlestick chart
     const candlestickLayout = {
       title: { text: `${ticker} Price History` },
-      yaxis: { title: { text: 'Price' } },
       height: 500,
-      margin: { t: 40 }
+      margin: { t: 40, r: 10, l: 60, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      xaxis: {
+        gridcolor: 'rgba(0,0,0,0.1)',
+        zerolinecolor: 'rgba(0,0,0,0.2)'
+      },
+      yaxis: {
+        title: { text: 'Price' },
+        gridcolor: 'rgba(0,0,0,0.1)',
+        zerolinecolor: 'rgba(0,0,0,0.2)'
+      }
     };
 
     // Plot returns chart
     const returnLayout = {
       title: { text: 'Daily Returns (%)' },
-      yaxis: { title: { text: 'Return (%)' } },
       height: 400,
-      margin: { t: 40 },
+      margin: { t: 40, r: 10, l: 60, b: 40 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
       showlegend: true,
-      legend: { orientation: 'h' as const, y: -0.2 }
+      legend: { orientation: 'h' as const, y: -0.2 },
+      xaxis: {
+        gridcolor: 'rgba(0,0,0,0.1)',
+        zerolinecolor: 'rgba(0,0,0,0.2)'
+      },
+      yaxis: {
+        title: { text: 'Return (%)' },
+        gridcolor: 'rgba(0,0,0,0.1)',
+        zerolinecolor: 'rgba(0,0,0,0.2)'
+      }
     };
 
     // Create the plots
     Promise.all([
-      Plotly.newPlot(candlestickChartRef.current, candlestickData, candlestickLayout),
-      Plotly.newPlot(returnsChartRef.current, returnData, returnLayout)
-    ]).catch(console.error);
+      candlestickChartRef.current ? Plotly.newPlot(candlestickChartRef.current, candlestickData, candlestickLayout) : null,
+      returnsChartRef.current ? Plotly.newPlot(returnsChartRef.current, returnData, returnLayout) : null
+    ].filter((p): p is Promise<any> => p !== null)).catch(console.error);
 
     // Cleanup function
     return () => {
@@ -153,30 +193,125 @@ export default function AssetPage() {
   return (
     <div className="asset-page">
       <header className="page-header">
-        <h1 className="title">{asset?.symbol}</h1>
+        <h1 className="title">{asset?.ticker || asset?.name}</h1>
         <div className="controls">
           {/* Placeholder for TimeWindow/Scale controls if needed in future */}
         </div>
       </header>
 
-      <ErrorBoundary>
-        <div className="chart-card">
-          <div ref={candlestickChartRef} className="chart-area"></div>
-        </div>
-      </ErrorBoundary>
+      <div className="cards-grid">
+        <ErrorBoundary>
+          <div className="chart-card">
+            <div ref={candlestickChartRef} className="chart-area"></div>
+          </div>
+        </ErrorBoundary>
 
-      <ErrorBoundary>
-        <div className="chart-card">
-          <div ref={returnsChartRef} className="chart-area"></div>
+        <div className="chart-card placeholder-card">
+          <h3>Market Summary</h3>
+          <div className="placeholder-content">Coming Soon</div>
         </div>
-      </ErrorBoundary>
+
+        <ErrorBoundary>
+          <div className="chart-card">
+            <div ref={returnsChartRef} className="chart-area"></div>
+          </div>
+        </ErrorBoundary>
+
+        <div className="chart-card placeholder-card">
+          <h3>Technical Analysis</h3>
+          <div className="placeholder-content">Coming Soon</div>
+        </div>
+      </div>
 
       <style>{`
-        .asset-page { padding: var(--spacing-6); }
-        .page-header { margin-bottom: var(--spacing-4); }
-        .title { color: var(--primary); margin-bottom: var(--spacing-2); }
-        .chart-card { background: var(--bg-primary); border-radius: 8px; padding: var(--spacing-4); box-shadow: var(--shadow-sm); margin-bottom: var(--spacing-4); }
-        .chart-area { width: 100%; height: 500px }
+        .asset-page {
+          display: flex;
+          flex-direction: column;
+          padding: var(--spacing-6);
+          width: 100%;
+          max-width: 100%;
+          gap: var(--spacing-6);
+        }
+        .page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: var(--spacing-6);
+          background: var(--bg-primary);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-sm);
+          margin-bottom: var(--spacing-4);
+        }
+        .title {
+          font-size: 28px;
+          font-weight: 600;
+          color: var(--text);
+          margin: 0;
+        }
+        .cards-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--spacing-8);
+          padding: var(--spacing-6);
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+        .chart-card {
+          position: relative;
+          background: var(--bg-primary);
+          border-radius: var(--radius-lg);
+          padding: var(--spacing-8);
+          box-shadow: rgba(0, 0, 0, 0.1) 0px 1px 3px, rgba(0, 0, 0, 0.05) 0px 8px 24px;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          height: 360px;
+          width: 100%;
+        }
+        .chart-card:hover {
+          transform: translateY(-2px);
+          box-shadow: rgba(0, 0, 0, 0.1) 0px 2px 4px, rgba(0, 0, 0, 0.1) 0px 12px 32px;
+        }
+        .chart-card:after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 16px;
+          right: 16px;
+          height: 4px;
+          background: var(--primary);
+          border-radius: 2px;
+        }
+        .chart-area {
+          height: 100%;
+          width: 100%;
+        }
+        .placeholder-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+        .placeholder-card h3 {
+          color: var(--text);
+          margin: 0 0 var(--spacing-4) 0;
+          font-size: var(--font-size-lg);
+        }
+        .placeholder-content {
+          color: var(--text-secondary);
+          font-size: var(--font-size-base);
+        }
+        /* Different accent colors for each card */
+        .chart-card:nth-child(1):after {
+          background: var(--primary);
+        }
+        .chart-card:nth-child(2):after {
+          background: var(--prophet-marketmind);
+        }
+        .chart-card:nth-child(3):after {
+          background: var(--prophet-timesage);
+        }
+        .chart-card:nth-child(4):after {
+          background: var(--prophet-quantum);
+        }
       `}</style>
     </div>
   );

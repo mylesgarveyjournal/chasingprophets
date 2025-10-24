@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './SearchBox.css';
-import { searchAssets } from '../../services/assets';
+import { searchAssets, getAssetPrices, getAsset } from '../../services/assets';
 import { useNavigate } from 'react-router-dom';
 
 export interface SearchResult {
@@ -85,9 +85,27 @@ export default function SearchBox({ placeholder = 'Search markets, prophets, ana
     setOpen(false);
     setQuery('');
     setResults([]);
-    // navigate to asset page
+    // Before navigating, ensure the asset exists or has price data to avoid landing on an error page.
     if (r && r.ticker) {
-      navigate(`/assets/${encodeURIComponent(r.ticker)}`);
+      (async () => {
+        try {
+          const [assetMeta, prices] = await Promise.all([
+            getAsset(r.ticker),
+            getAssetPrices(r.ticker)
+          ]);
+          if ((assetMeta && Object.keys(assetMeta).length) || (prices && prices.length)) {
+            navigate(`/assets/${encodeURIComponent(r.ticker)}`);
+          } else {
+            console.error('Selected asset has no data:', r.ticker);
+            // keep the search open to allow retry
+            setOpen(true);
+          }
+        } catch (err) {
+          console.error('Error checking asset before navigate:', err);
+          // fallback to navigate anyway so the user sees the not-found UI
+          navigate(`/assets/${encodeURIComponent(r.ticker)}`);
+        }
+      })();
     }
   }
 

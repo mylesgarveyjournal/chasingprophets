@@ -1,7 +1,7 @@
-import { Asset } from '../types/asset';
+import { PriceData } from '../types/price';
 
-function generateTestData(symbol: string, startDate: Date, days: number): Asset[] {
-  const data: Asset[] = [];
+function generateTestData(symbol: string, startDate: Date, days: number): PriceData[] {
+  const data: PriceData[] = [];
   let currentDate = startDate;
   let lastClose = symbol === 'DJIA' ? 46000 : 4600; // Starting values
 
@@ -20,7 +20,7 @@ function generateTestData(symbol: string, startDate: Date, days: number): Asset[
     const quantumPredictor = close * (1 + (Math.random() - 0.46) * 0.05);
 
     data.push({
-      symbol,
+      ticker: symbol,
       date: currentDate.toISOString().split('T')[0],
       open,
       high,

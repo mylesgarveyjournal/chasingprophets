@@ -184,8 +184,9 @@
   flex-direction: column;
   margin-left: var(--sidebar-width-expanded);
   min-height: 100vh;
+  width: calc(100% - var(--sidebar-width-expanded));
   background: var(--bg-secondary);
-  transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   z-index: 1;
   padding-top: var(--header-height);
@@ -193,6 +194,7 @@
 
 .main-container.collapsed {
   margin-left: var(--sidebar-width-collapsed);
+  width: calc(100% - var(--sidebar-width-collapsed));
 }
 
 /* Header */
@@ -390,14 +392,13 @@
 /* Main Content */
 .main-content {
   flex: 1;
-  padding: var(--spacing-6) var(--spacing-6) var(--spacing-6) var(--spacing-8);
   width: 100%;
-  max-width: var(--content-max-width);
-  margin: var(--spacing-4) auto 0;
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  min-height: calc(100vh - var(--header-height) - var(--spacing-4));
+  margin: 0;
+  padding: 0;
+  background: var(--bg-secondary);
+  min-height: calc(100vh - var(--header-height));
   position: relative;
   z-index: 1;
+  display: flex;
+  overflow: hidden;
 }

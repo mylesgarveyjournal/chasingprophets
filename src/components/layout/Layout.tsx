@@ -31,7 +31,6 @@ const Layout: React.FC = () => {
 
   useEffect(() => {
     refreshUnreadCount();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // If auth populates a little after mount, retry once after a short delay to ensure badge updates.
@@ -43,7 +42,6 @@ const Layout: React.FC = () => {
       }, 1000);
     }
     return () => { if (t) clearTimeout(t); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // We deliberately keep the bell inline with the username so it visually sits to the left
@@ -107,8 +105,6 @@ const Layout: React.FC = () => {
       <div className={`main-container ${isCollapsed ? 'collapsed' : ''}`}>
         <header className="header">
           <div className="search-bar">
-            <Search />
-            {/* Modular instant search box */}
             <SearchBox />
           </div>
 
@@ -142,21 +138,3 @@ const Layout: React.FC = () => {
 };
 
 export default Layout;
-
-function useRefreshUnread(user: any, setUnreadCount: (n:number)=>void) {
-  React.useEffect(() => {
-    let mounted = true;
-    async function load() {
-      if (!user) return;
-      const id = user.username || user.email || 'admin';
-      try {
-        const count = await getUnreadCountForUser(id);
-        if (mounted) setUnreadCount(count);
-      } catch (err) {
-        console.error('Failed to load unread count', err);
-      }
-    }
-    load();
-    return () => { mounted = false; };
-  }, [user, setUnreadCount]);
-}
