@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { BarChart2, Database, Settings, Search, LogOut, Bell } from 'react-feather';
+import NotificationPopup from '../notifications/NotificationPopup';
+import { getUnreadCountForUser } from '../../services/notifications';
 import './Layout.css';
 
 const Layout: React.FC = () => {
@@ -9,6 +11,42 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  // bell will be inline in the header; popup is positioned relative to the bell wrapper
+
+  async function refreshUnreadCount() {
+    if (!user) return;
+    try {
+      const idsToQuery = Array.from(new Set([user.username, user.email].filter(Boolean)));
+      console.debug('refreshUnreadCount: querying ids', idsToQuery);
+      const count = await getUnreadCountForUser(idsToQuery);
+      console.debug('refreshUnreadCount: count=', count);
+      setUnreadCount(count);
+    } catch (err) {
+      console.error('Failed to refresh unread count', err);
+    }
+  }
+
+  useEffect(() => {
+    refreshUnreadCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // If auth populates a little after mount, retry once after a short delay to ensure badge updates.
+  useEffect(() => {
+    let t: any;
+    if (!user) {
+      t = setTimeout(() => {
+        refreshUnreadCount();
+      }, 1000);
+    }
+    return () => { if (t) clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // We deliberately keep the bell inline with the username so it visually sits to the left
+  // of the username; popup is anchored to the bell wrapper and opens to the left (CSS uses right:0).
 
   const handleLogout = () => {
     signOut();
@@ -73,9 +111,17 @@ const Layout: React.FC = () => {
           </div>
 
           <div className="user-menu">
-            <button className="icon-button bell-icon" title="Notifications">
-              <Bell size={20} />
-            </button>
+            <div className="bell-wrapper">
+              <button className="icon-button bell-icon" title="Notifications" onClick={() => setShowNotifications(!showNotifications)}>
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span className="badge">{unreadCount}</span>
+                )}
+              </button>
+              {showNotifications && (
+                <NotificationPopup onClose={() => { setShowNotifications(false); refreshUnreadCount(); }} onChange={() => refreshUnreadCount()} />
+              )}
+            </div>
             <div className="user-profile">
               <span className="username">{user?.username}</span>
             </div>
@@ -94,3 +140,21 @@ const Layout: React.FC = () => {
 };
 
 export default Layout;
+
+function useRefreshUnread(user: any, setUnreadCount: (n:number)=>void) {
+  React.useEffect(() => {
+    let mounted = true;
+    async function load() {
+      if (!user) return;
+      const id = user.username || user.email || 'admin';
+      try {
+        const count = await getUnreadCountForUser(id);
+        if (mounted) setUnreadCount(count);
+      } catch (err) {
+        console.error('Failed to load unread count', err);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, [user, setUnreadCount]);
+}

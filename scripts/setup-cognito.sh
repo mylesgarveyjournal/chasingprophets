@@ -130,6 +130,32 @@ setup_cognito() {
         --password "Admin123!" \
         --permanent
 
+    # Create regular user account (username 'user' with email)
+    print_status "Creating regular user account..." "info"
+    aws cognito-idp admin-create-user \
+        --user-pool-id $USER_POOL_ID \
+        --username user \
+        --temporary-password "User123!" \
+        --user-attributes Name=email,Value=user@chasingprophets.local \
+        --message-action SUPPRESS
+
+    if [ $? -ne 0 ]; then
+        print_status "Failed to create regular user" "error"
+        exit 1
+    fi
+
+    # Set permanent password for regular user
+    aws cognito-idp admin-set-user-password \
+        --user-pool-id $USER_POOL_ID \
+        --username user \
+        --password "User123!" \
+        --permanent
+
+    if [ $? -ne 0 ]; then
+        print_status "Failed to set permanent password for regular user" "error"
+        exit 1
+    fi
+
     if [ $? -ne 0 ]; then
         print_status "Failed to set permanent password for admin user" "error"
         exit 1

@@ -17,6 +17,7 @@ const TABLES = {
   ASSETS: "ChasingProphets-Assets", // Stores asset metadata
   PRICES: "ChasingProphets-AssetPrices", // Stores historical price data
   USERS: "ChasingProphets-Users"
+  ,NOTIFICATIONS: "ChasingProphets-Notifications"
 };
 
 // Sample data
@@ -135,6 +136,32 @@ async function createPricesTable() {
   }
 }
 
+async function createNotificationsTable() {
+  const params = {
+    TableName: TABLES.NOTIFICATIONS,
+    KeySchema: [
+      { AttributeName: "userId", KeyType: "HASH" as const },
+      { AttributeName: "notificationId", KeyType: "RANGE" as const }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "userId", AttributeType: "S" as const },
+      { AttributeName: "notificationId", AttributeType: "S" as const }
+    ],
+    BillingMode: "PAY_PER_REQUEST" as const
+  };
+
+  try {
+    await client.send(new CreateTableCommand(params));
+    console.log(`Created table: ${TABLES.NOTIFICATIONS}`);
+  } catch (err) {
+    if (err instanceof ResourceInUseException) {
+      console.log(`Table ${TABLES.NOTIFICATIONS} already exists`);
+    } else {
+      throw err;
+    }
+  }
+}
+
 async function createUsersTable() {
   const params = {
     TableName: TABLES.USERS,
@@ -230,7 +257,9 @@ async function insertSampleData() {
   // Insert assets and their price data
   for (let idx = 0; idx < sampleStocks.length; idx++) {
     const stock = sampleStocks[idx];
+    try {
       // Insert asset metadata
+      console.log(`Inserting asset metadata for ${stock.ticker} into ${TABLES.ASSETS}`);
       await client.send(new PutItemCommand({
         TableName: TABLES.ASSETS,
         Item: {
@@ -241,11 +270,132 @@ async function insertSampleData() {
           createdAt: { S: new Date().toISOString() }
         }
       }));
-      
+
       // Generate and insert price history via batch writes
       const priceData = generateStockData(stock.ticker, stock.market, stock.lastPrice, 1000 + idx);
+      console.log(`Writing ${priceData.length} price items to ${TABLES.PRICES}`);
       await batchWriteItems(TABLES.PRICES, priceData);
       console.log(`Inserted data for ${stock.ticker}`);
+    } catch (err) {
+      console.error(`Failed inserting data for ${stock.ticker}:`, err);
+      throw err;
+    }
+  }
+
+  // Insert some sample notifications for users (unchecked = unread)
+  const notifications: any[] = [
+    // Email-keyed notifications (legacy)
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "user@chasingprophets.local" },
+          notificationId: { S: "notif-user-1" },
+          message: { S: "Welcome to ChasingProphets! Check out the dashboard." },
+          checked: { BOOL: false },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "user@chasingprophets.local" },
+          notificationId: { S: "notif-user-2" },
+          message: { S: "New analysis available for AAPL." },
+          checked: { BOOL: false },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "user@chasingprophets.local" },
+          notificationId: { S: "notif-user-3" },
+          message: { S: "Old notification (read)." },
+          checked: { BOOL: true },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "admin@chasingprophets.local" },
+          notificationId: { S: "notif-admin-1" },
+          message: { S: "Admin: project stats are available." },
+          checked: { BOOL: false },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+
+    // Username-keyed notifications (Cognito username)
+    // username-keyed notifications (Cognito usernames)
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "user" },
+          notificationId: { S: "notif-user-1-username" },
+          message: { S: "Welcome to ChasingProphets! Check out the dashboard." },
+          checked: { BOOL: false },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "user" },
+          notificationId: { S: "notif-user-2-username" },
+          message: { S: "New analysis available for AAPL." },
+          checked: { BOOL: false },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "user" },
+          notificationId: { S: "notif-user-3-username-read" },
+          message: { S: "Old note for user (read)." },
+          checked: { BOOL: true },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "admin@chasingprophets.local" },
+          notificationId: { S: "notif-admin-1-username" },
+          message: { S: "Admin: project stats are available." },
+          checked: { BOOL: false },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    },
+    {
+      PutRequest: {
+        Item: {
+          userId: { S: "admin@chasingprophets.local" },
+          notificationId: { S: "notif-admin-2-username-read" },
+          message: { S: "Admin: old notice (read)." },
+          checked: { BOOL: true },
+          createdAt: { S: new Date().toISOString() }
+        }
+      }
+    }
+  ];
+
+  try {
+    console.log(`Writing ${notifications.length} notifications to ${TABLES.NOTIFICATIONS}`);
+    await batchWriteItems(TABLES.NOTIFICATIONS, notifications);
+    console.log("Inserted sample notifications");
+  } catch (err) {
+    console.error('Failed inserting notifications:', err);
+    throw err;
   }
 }
 
@@ -347,6 +497,8 @@ async function setup(reset = false) {
     await new Promise(resolve => setTimeout(resolve, 10000));
 
     await createPricesTable();
+  // create notifications table
+  await createNotificationsTable();
     // Wait for last table
     console.log("Waiting for Prices table to be ready...");
     await new Promise(resolve => setTimeout(resolve, 10000));
